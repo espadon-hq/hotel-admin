@@ -3,179 +3,96 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hotel Admin — Готелі</title>
+  <title>Hotel Admin — Дашборд</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <nav class="sidebar">
   <div class="sidebar-logo">Hotel<br><span>Admin Panel</span></div>
   <div class="nav-section">Головне</div>
-  <a href="/static/index.html" class="nav-link">Дашборд</a>
+  <a href="/static/index.html" class="nav-link active">Дашборд</a>
   <div class="nav-section">Управління</div>
-  <a href="/static/hotels.html" class="nav-link active">Готелі</a>
+  <a href="/static/hotels.html" class="nav-link">Готелі</a>
   <a href="/static/rooms.html" class="nav-link">Номери</a>
   <a href="/static/bookings.html" class="nav-link">Бронювання</a>
   <a href="/static/users.html" class="nav-link">Користувачі</a>
-
-  <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Змінити тему">◑</button>
+  <button class="theme-toggle" onclick="toggleTheme()" title="Змінити тему">◑</button>
 </nav>
+
 <main class="main">
   <div class="page-header">
-    <h1 class="page-title">Готелі</h1>
-    <button class="btn btn-primary" onclick="openAddModal()">+ Додати готель</button>
+    <h1 class="page-title">Дашборд</h1>
+    <button class="btn btn-ghost" onclick="loadStats()">Оновити</button>
   </div>
-  <div class="toolbar">
-    <input class="search-input" id="search" placeholder="Пошук по назві, місту…" oninput="debouncedLoad()">
-    <select class="filter-select" id="filter-city" onchange="load()"><option value="">Всі міста</option></select>
-    <select class="filter-select" id="filter-stars" onchange="load()">
-      <option value="">Всі зірки</option>
-      <option value="1">1</option><option value="2">2</option>
-      <option value="3">3</option><option value="4">4</option><option value="5">5</option>
-    </select>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th data-sort="ID_Hotel"      onclick="tbl.sort(this)">ID</th>
-        <th data-sort="Name"          onclick="tbl.sort(this)">Назва</th>
-        <th data-sort="City"          onclick="tbl.sort(this)">Місто</th>
-        <th data-sort="Stars"         onclick="tbl.sort(this)">Зірки</th>
-        <th data-sort="avg_rating"    onclick="tbl.sort(this)">Рейтинг</th>
-        <th data-sort="rooms_count"   onclick="tbl.sort(this)">Номери</th>
-        <th data-sort="reviews_count" onclick="tbl.sort(this)">Відгуки</th>
-        <th data-sort="Phone"         onclick="tbl.sort(this)">Телефон</th>
-        <th>Дії</th>
-      </tr></thead>
-      <tbody id="hotels-body">
-        <tr><td colspan="9"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>
-      </tbody>
-    </table>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Статуси бронювань</div>
+      <div id="chart-statuses"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Топ готелів за виручкою</div>
+      <div id="chart-hotels"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
   </div>
 </main>
 
-<div class="modal-overlay" id="modal-hotel">
-  <div class="modal">
-    <div class="modal-title">
-      <span id="modal-title-text">Новий готель</span>
-      <button class="modal-close" onclick="closeModal('modal-hotel')">✕</button>
-    </div>
-    <div class="form-grid">
-      <div class="form-group full"><label class="form-label">Назва *</label><input class="form-input" id="f-name" placeholder="Назва готелю"></div>
-      <div class="form-group"><label class="form-label">Місто</label><input class="form-input" id="f-city" placeholder="Київ"></div>
-      <div class="form-group"><label class="form-label">Зірки</label>
-        <select class="form-select" id="f-stars"><option value="">—</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
-      </div>
-      <div class="form-group full"><label class="form-label">Адреса</label><input class="form-input" id="f-address" placeholder="вул. Хрещатик, 1"></div>
-      <div class="form-group"><label class="form-label">Телефон</label><input class="form-input" id="f-phone" placeholder="+380501234567"></div>
-      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" type="email"></div>
-      <div class="form-group"><label class="form-label">Заїзд</label><input class="form-input" id="f-checkin" type="time"></div>
-      <div class="form-group"><label class="form-label">Виїзд</label><input class="form-input" id="f-checkout" type="time"></div>
-      <div class="form-group"><label class="form-label">Координати</label><input class="form-input" id="f-coords" placeholder="50.4501,30.5234"></div>
-      <div class="form-group full"><label class="form-label">Опис</label><textarea class="form-textarea" id="f-desc"></textarea></div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('modal-hotel')">Скасувати</button>
-      <button class="btn btn-primary" onclick="saveHotel()">Зберегти</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="modal-confirm">
-  <div class="modal" style="width:360px">
-    <div class="modal-title"><span>Підтвердження</span><button class="modal-close" onclick="closeModal('modal-confirm')">✕</button></div>
-    <p style="color:var(--text-muted);margin-bottom:24px">Ви впевнені, що хочете видалити цей готель?</p>
-    <div class="form-actions">
-      <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">Скасувати</button>
-      <button class="btn btn-danger" onclick="confirmDelete()">Видалити</button>
-    </div>
-  </div>
-</div>
-
 <script src="/static/app.js"></script>
 <script>
-let editId = null, deleteId = null;
-const debouncedLoad = debounce(load);
-
-const tbl = makeTableSorter('hotels-body', h => `
-  <tr>
-    <td class="td-muted">${h.ID_Hotel}</td>
-    <td><strong>${esc(h.Name)}</strong></td>
-    <td class="td-muted">${esc(h.City)||'—'}</td>
-    <td>${h.Stars||'—'}</td>
-    <td>${h.avg_rating ? `<span style="color:var(--warning)">${h.avg_rating}</span>` : '<span class="td-muted">—</span>'}</td>
-    <td>${h.rooms_count??0}</td>
-    <td>${h.reviews_count??0}</td>
-    <td class="td-muted">${esc(h.Phone)||'—'}</td>
-    <td><div class="td-actions">
-      <button class="btn btn-ghost btn-sm" onclick="openEditModal(${h.ID_Hotel})">Ред.</button>
-      <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${h.ID_Hotel})">Вид.</button>
-    </div></td>
-  </tr>`);
-
-async function load() {
-  const params = { search: document.getElementById('search').value, city: document.getElementById('filter-city').value, stars: document.getElementById('filter-stars').value };
-  document.getElementById('hotels-body').innerHTML = '<tr><td colspan="9"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>';
-  try {
-    const data = await apiGet('/hotels', params);
-    const cities = [...new Set(data.map(h => h.City).filter(Boolean))].sort();
-    const cs = document.getElementById('filter-city'), cur = cs.value;
-    cs.innerHTML = '<option value="">Всі міста</option>' + cities.map(c => `<option value="${esc(c)}"${c===cur?' selected':''}>${esc(c)}</option>`).join('');
-    tbl.setData(data);
-  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
-}
-
-function openAddModal() {
-  editId = null;
-  document.getElementById('modal-title-text').textContent = 'Новий готель';
-  ['name','city','address','phone','email','coords','desc'].forEach(f => document.getElementById('f-'+f).value='');
-  document.getElementById('f-stars').value=''; document.getElementById('f-checkin').value=''; document.getElementById('f-checkout').value='';
-  openModal('modal-hotel');
-}
-async function openEditModal(id) {
-  editId = id;
-  document.getElementById('modal-title-text').textContent = 'Редагувати готель';
-  try {
-    const h = await apiGet(`/hotels/${id}`);
-    document.getElementById('f-name').value    = h.Name||'';
-    document.getElementById('f-city').value    = h.City||'';
-    document.getElementById('f-address').value = h.Address||'';
-    document.getElementById('f-phone').value   = h.Phone||'';
-    document.getElementById('f-email').value   = h.Email||'';
-    document.getElementById('f-coords').value  = h.Coordinates||'';
-    document.getElementById('f-desc').value    = h.Description||'';
-    document.getElementById('f-stars').value   = h.Stars||'';
-    document.getElementById('f-checkin').value = h.Check_in_time?h.Check_in_time.slice(0,5):'';
-    document.getElementById('f-checkout').value= h.Check_out_time?h.Check_out_time.slice(0,5):'';
-    openModal('modal-hotel');
-  } catch(e) { toast('Помилка: '+e.message,'error'); }
-}
-async function saveHotel() {
-  const name = document.getElementById('f-name').value.trim();
-  if (!name) { toast('Вкажіть назву', 'error'); return; }
-  const payload = { Name:name, City:document.getElementById('f-city').value.trim()||null, Address:document.getElementById('f-address').value.trim()||null, Phone:document.getElementById('f-phone').value.trim()||null, Email:document.getElementById('f-email').value.trim()||null, Coordinates:document.getElementById('f-coords').value.trim()||null, Description:document.getElementById('f-desc').value.trim()||null, Stars:document.getElementById('f-stars').value?Number(document.getElementById('f-stars').value):null, Check_in_time:document.getElementById('f-checkin').value||null, Check_out_time:document.getElementById('f-checkout').value||null };
-  try {
-    editId ? await apiPut(`/hotels/${editId}`,payload) : await apiPost('/hotels',payload);
-    toast(editId?'Оновлено':'Додано'); closeModal('modal-hotel'); load();
-  } catch(e) { toast('Помилка: '+e.message,'error'); }
-}
-function openDeleteModal(id) { deleteId=id; openModal('modal-confirm'); }
-async function confirmDelete() {
-  try { await apiDelete(`/hotels/${deleteId}`); toast('Видалено'); closeModal('modal-confirm'); load(); }
-  catch(e) { toast('Помилка: '+e.message,'error'); }
-}
-load();
-</script>
-
-<script>
 (function() {
-  if (localStorage.getItem('theme') === 'light') {
-    document.body.classList.add('light');
-  }
+  if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
 })();
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
 }
+
+async function loadStats() {
+  try {
+    const s = await apiGet('/stats');
+
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-card"><div class="stat-label">Готелі</div><div class="stat-value">${s.hotels}</div></div>
+      <div class="stat-card"><div class="stat-label">Номери</div><div class="stat-value">${s.rooms}</div></div>
+      <div class="stat-card"><div class="stat-label">Бронювань</div><div class="stat-value">${s.bookings}</div></div>
+      <div class="stat-card"><div class="stat-label">Користувачів</div><div class="stat-value">${s.users}</div></div>
+      <div class="stat-card"><div class="stat-label">Виручка</div><div class="stat-value">${fmtMoney(s.revenue)}</div></div>
+    `;
+
+    const maxSt = Math.max(...s.status_counts.map(x => x.count), 1);
+    document.getElementById('chart-statuses').innerHTML = s.status_counts.length
+      ? s.status_counts.map(x => `
+          <div class="bar-item">
+            <div class="bar-label">${esc(x.Title)}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${(x.count/maxSt*100).toFixed(1)}%"></div></div>
+            <div class="bar-value">${x.count}</div>
+          </div>`).join('')
+      : '<div class="empty-state"><p>Немає даних</p></div>';
+
+    const maxRev = Math.max(...s.hotel_stats.map(x => Number(x.revenue)), 1);
+    document.getElementById('chart-hotels').innerHTML = s.hotel_stats.slice(0, 8).length
+      ? s.hotel_stats.slice(0, 8).map(x => `
+          <div class="bar-item">
+            <div class="bar-label" title="${esc(x.Name)}">${esc(x.Name.length > 18 ? x.Name.slice(0,16)+'…' : x.Name)}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${(Number(x.revenue)/maxRev*100).toFixed(1)}%"></div></div>
+            <div class="bar-value">${fmtMoney(x.revenue)}</div>
+          </div>`).join('')
+      : '<div class="empty-state"><p>Немає даних</p></div>';
+
+  } catch(e) {
+    toast('Помилка завантаження статистики: ' + e.message, 'error');
+  }
+}
+
+loadStats();
 </script>
 </body>
 </html>
