@@ -16,6 +16,8 @@
   <a href="/static/rooms.html" class="nav-link">Номери</a>
   <a href="/static/bookings.html" class="nav-link active">Бронювання</a>
   <a href="/static/users.html" class="nav-link">Користувачі</a>
+
+  <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Змінити тему">◑</button>
 </nav>
 <main class="main">
   <div class="page-header">
@@ -149,6 +151,18 @@ async function confirmDelete() {
   catch(e) { toast('Помилка: '+e.message,'error'); }
 }
 loadRefs().then(load);
+</script>
+
+<script>
+(function() {
+  if (localStorage.getItem('theme') === 'light') {
+    document.body.classList.add('light');
+  }
+})();
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+}
 </script>
 </body>
 </html>
