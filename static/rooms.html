@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotel Admin — Номери</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">Hotel<br><span>Admin Panel</span></div>
+  <div class="nav-section">Головне</div>
+  <a href="/static/index.html" class="nav-link"> Дашборд</a>
+  <div class="nav-section">Управління</div>
+  <a href="/static/hotels.html" class="nav-link"> Готелі</a>
+  <a href="/static/rooms.html" class="nav-link active"> Номери</a>
+  <a href="/static/bookings.html" class="nav-link"> Бронювання</a>
+  <a href="/static/users.html" class="nav-link"> Користувачі</a>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h1 class="page-title">Номери</h1>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Додати номер</button>
+  </div>
+
+  <div class="toolbar">
+    <input class="search-input" id="search" placeholder="Пошук по номеру, готелю…" oninput="debouncedLoad()">
+    <select class="filter-select" id="filter-hotel" onchange="load()">
+      <option value="">Всі готелі</option>
+    </select>
+    <select class="filter-select" id="filter-status" onchange="load()">
+      <option value="">Всі статуси</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-sort="ID_Room" onclick="sortBy(this)">ID </th>
+          <th data-sort="Room_number" onclick="sortBy(this)">Номер </th>
+          <th>Готель</th>
+          <th>Місто</th>
+          <th data-sort="Floor" onclick="sortBy(this)">Поверх </th>
+          <th>Тип</th>
+          <th>Статус</th>
+          <th data-sort="Price_per_day" onclick="sortBy(this)">Ціна/день </th>
+          <th>Площа</th>
+          <th>Дії</th>
+        </tr>
+      </thead>
+      <tbody id="rooms-body">
+        <tr><td colspan="10"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Modal: Add/Edit Room -->
+<div class="modal-overlay" id="modal-room">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modal-title-text">Новий номер</span>
+      <button class="modal-close" onclick="closeModal('modal-room')"></button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Номер кімнати</label>
+        <input class="form-input" id="f-number" placeholder="101">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Поверх</label>
+        <input class="form-input" id="f-floor" type="number" min="1" placeholder="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Готель</label>
+        <select class="form-select" id="f-hotel"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Тип номеру</label>
+        <select class="form-select" id="f-type"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Статус</label>
+        <select class="form-select" id="f-status"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ціна за добу (₴)</label>
+        <input class="form-input" id="f-price" type="number" min="0" step="0.01" placeholder="1500">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-room')">Скасувати</button>
+      <button class="btn btn-primary" onclick="saveRoom()">Зберегти</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Delete -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="width:360px">
+    <div class="modal-title">
+      <span>Підтвердження</span>
+      <button class="modal-close" onclick="closeModal('modal-confirm')"></button>
+    </div>
+    <p style="color:var(--text-muted);margin-bottom:24px">Ви впевнені, що хочете видалити цей номер?</p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">Скасувати</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Видалити</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let editId = null;
+let deleteId = null;
+let hotels = [], roomTypes = [], roomStatuses = [];
+const sorter = makeSorter('ID_Room');
+const debouncedLoad = debounce(load);
+
+async function loadRefs() {
+  [hotels, roomTypes, roomStatuses] = await Promise.all([
+    apiGet('/hotels'),
+    apiGet('/room-types'),
+    apiGet('/room-statuses'),
+  ]);
+
+  // Populate hotel filter
+  const hotelSel = document.getElementById('filter-hotel');
+  hotelSel.innerHTML = '<option value="">Всі готелі</option>' +
+    hotels.map(h => `<option value="${h.ID_Hotel}">${esc(h.Name)}</option>`).join('');
+
+  // Populate status filter
+  const statusSel = document.getElementById('filter-status');
+  statusSel.innerHTML = '<option value="">Всі статуси</option>' +
+    roomStatuses.map(s => `<option value="${s.ID_RoomStatus}">${esc(s.Title)}</option>`).join('');
+}
+
+async function load() {
+  const params = {
+    search: document.getElementById('search').value,
+    hotel:  document.getElementById('filter-hotel').value   || null,
+    status: document.getElementById('filter-status').value  || null,
+    ...sorter.get(),
+  };
+  const tbody = document.getElementById('rooms-body');
+  tbody.innerHTML = '<tr><td colspan="10"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>';
+  try {
+    const data = await apiGet('/rooms', params);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><p>Номерів не знайдено</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(r => `
+      <tr>
+        <td class="td-muted">${r.ID_Room}</td>
+        <td><strong>${esc(r.Room_number) || '—'}</strong></td>
+        <td>${esc(r.hotel_name) || '<span class="td-muted">—</span>'}</td>
+        <td class="td-muted">${esc(r.hotel_city) || '—'}</td>
+        <td class="td-muted">${r.Floor ?? '—'}</td>
+        <td>${esc(r.type_title) || '<span class="td-muted">—</span>'}</td>
+        <td>${roomStatusBadge(r.status_title)}</td>
+        <td>${r.Price_per_day ? fmtMoney(r.Price_per_day) : '<span class="td-muted">—</span>'}</td>
+        <td class="td-muted">${r.Area ? r.Area + ' м²' : '—'}</td>
+        <td>
+          <div class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openEditModal(${r.ID_Room})"> Ред.</button>
+            <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${r.ID_Room})">Вид.</button>
+          </div>
+        </td>
+      </tr>`).join('');
+    sorter.apply(document.querySelectorAll('thead th[data-sort]'));
+  } catch(e) {
+    toast('Помилка: ' + e.message, 'error');
+  }
+}
+
+function sortBy(th) { sorter.toggle(th.dataset.sort); load(); }
+
+function fillFormSelects() {
+  document.getElementById('f-hotel').innerHTML =
+    '<option value="">— Обрати готель —</option>' +
+    hotels.map(h => `<option value="${h.ID_Hotel}">${esc(h.Name)}</option>`).join('');
+  document.getElementById('f-type').innerHTML =
+    '<option value="">— Тип —</option>' +
+    roomTypes.map(t => `<option value="${t.ID_RoomType}">${esc(t.Title)}</option>`).join('');
+  document.getElementById('f-status').innerHTML =
+    '<option value="">— Статус —</option>' +
+    roomStatuses.map(s => `<option value="${s.ID_RoomStatus}">${esc(s.Title)}</option>`).join('');
+}
+
+function openAddModal() {
+  editId = null;
+  document.getElementById('modal-title-text').textContent = 'Новий номер';
+  fillFormSelects();
+  ['number','floor','price'].forEach(f => document.getElementById('f-'+f).value = '');
+  document.getElementById('f-hotel').value = '';
+  document.getElementById('f-type').value = '';
+  document.getElementById('f-status').value = '';
+  openModal('modal-room');
+}
+
+async function openEditModal(id) {
+  editId = id;
+  document.getElementById('modal-title-text').textContent = 'Редагувати номер';
+  fillFormSelects();
+  try {
+    const r = await apiGet(`/rooms/${id}`);
+    document.getElementById('f-number').value = r.Room_number || '';
+    document.getElementById('f-floor').value  = r.Floor || '';
+    document.getElementById('f-price').value  = r.Price_per_day || '';
+    document.getElementById('f-hotel').value  = r.ID_Hotel || '';
+    document.getElementById('f-type').value   = r.ID_RoomType || '';
+    document.getElementById('f-status').value = r.ID_RoomStatus || '';
+    openModal('modal-room');
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+async function saveRoom() {
+  const payload = {
+    Room_number:    document.getElementById('f-number').value.trim() || null,
+    Floor:          document.getElementById('f-floor').value  ? Number(document.getElementById('f-floor').value)  : null,
+    Price_per_day:  document.getElementById('f-price').value  ? Number(document.getElementById('f-price').value)  : null,
+    ID_Hotel:       document.getElementById('f-hotel').value  ? Number(document.getElementById('f-hotel').value)  : null,
+    ID_RoomType:    document.getElementById('f-type').value   ? Number(document.getElementById('f-type').value)   : null,
+    ID_RoomStatus:  document.getElementById('f-status').value ? Number(document.getElementById('f-status').value) : null,
+  };
+  try {
+    if (editId) {
+      await apiPut(`/rooms/${editId}`, payload);
+      toast('Номер оновлено');
+    } else {
+      await apiPost('/rooms', payload);
+      toast('Номер додано');
+    }
+    closeModal('modal-room');
+    load();
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+function openDeleteModal(id) { deleteId = id; openModal('modal-confirm'); }
+
+async function confirmDelete() {
+  try {
+    await apiDelete(`/rooms/${deleteId}`);
+    toast('Номер видалено');
+    closeModal('modal-confirm');
+    load();
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+loadRefs().then(load);
+</script>
+</body>
+</html>

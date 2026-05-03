@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / PDF files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C++ extensions
+*.so
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables (СЕКРЕТНІ ДАНІ)
+.env
+.flaskenv
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Databases
+*.sqlite3
+*.db
+
+# OS generated files
+.DS_Store
+thumbs.db

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotel Admin — Дашборд</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">Hotel<br><span>Admin Panel</span></div>
+  <div class="nav-section">Головне</div>
+  <a href="/static/index.html" class="nav-link active"> Дашборд</a>
+  <div class="nav-section">Управління</div>
+  <a href="/static/hotels.html" class="nav-link"> Готелі</a>
+  <a href="/static/rooms.html" class="nav-link"> Номери</a>
+  <a href="/static/bookings.html" class="nav-link"> Бронювання</a>
+  <a href="/static/users.html" class="nav-link"> Користувачі</a>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h1 class="page-title">Дашборд</h1>
+    <button class="btn btn-ghost" onclick="loadStats()">Оновити</button>
+  </div>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="stat-card"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Статуси бронювань</div>
+      <div id="chart-statuses"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Топ готелів за виручкою</div>
+      <div id="chart-hotels"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+</main>
+
+<script src="/static/app.js"></script>
+<script>
+async function loadStats() {
+  try {
+    const s = await apiGet('/stats');
+
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-card">
+        
+        <div class="stat-label">Готелі</div>
+        <div class="stat-value">${s.hotels}</div>
+      </div>
+      <div class="stat-card">
+        
+        <div class="stat-label">Номери</div>
+        <div class="stat-value">${s.rooms}</div>
+      </div>
+      <div class="stat-card">
+        
+        <div class="stat-label">Бронювань</div>
+        <div class="stat-value">${s.bookings}</div>
+      </div>
+      <div class="stat-card">
+        
+        <div class="stat-label">Користувачів</div>
+        <div class="stat-value">${s.users}</div>
+      </div>
+      <div class="stat-card">
+        
+        <div class="stat-label">Виручка</div>
+        <div class="stat-value">${fmtMoney(s.revenue)}</div>
+      </div>
+    `;
+
+    // Statuses chart
+    const maxSt = Math.max(...s.status_counts.map(x => x.count), 1);
+    document.getElementById('chart-statuses').innerHTML = s.status_counts.length
+      ? s.status_counts.map(x => `
+        <div class="bar-item">
+          <div class="bar-label">${esc(x.Title)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(x.count/maxSt*100).toFixed(1)}%"></div></div>
+          <div class="bar-value">${x.count}</div>
+        </div>`).join('')
+      : '<div class="empty-state"><p>Немає даних</p></div>';
+
+    // Hotels chart
+    const maxRev = Math.max(...s.hotel_stats.map(x => Number(x.revenue)), 1);
+    document.getElementById('chart-hotels').innerHTML = s.hotel_stats.slice(0, 8).length
+      ? s.hotel_stats.slice(0, 8).map(x => `
+        <div class="bar-item">
+          <div class="bar-label" title="${esc(x.Name)}">${esc(x.Name.length > 18 ? x.Name.slice(0,16)+'…' : x.Name)}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(Number(x.revenue)/maxRev*100).toFixed(1)}%"></div></div>
+          <div class="bar-value">${fmtMoney(x.revenue)}</div>
+        </div>`).join('')
+      : '<div class="empty-state"><p>Немає даних</p></div>';
+
+  } catch (e) {
+    toast('Помилка завантаження статистики: ' + e.message, 'error');
+  }
+}
+
+loadStats();
+</script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotel Admin — Бронювання</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">Hotel<br><span>Admin Panel</span></div>
+  <div class="nav-section">Головне</div>
+  <a href="/static/index.html" class="nav-link"> Дашборд</a>
+  <div class="nav-section">Управління</div>
+  <a href="/static/hotels.html" class="nav-link"> Готелі</a>
+  <a href="/static/rooms.html" class="nav-link"> Номери</a>
+  <a href="/static/bookings.html" class="nav-link active"> Бронювання</a>
+  <a href="/static/users.html" class="nav-link"> Користувачі</a>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h1 class="page-title">Бронювання</h1>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Нове бронювання</button>
+  </div>
+
+  <div class="toolbar">
+    <input class="search-input" id="search" placeholder="Пошук по клієнту, готелю…" oninput="debouncedLoad()">
+    <select class="filter-select" id="filter-status" onchange="load()">
+      <option value="">Всі статуси</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-sort="ID_Booking" onclick="sortBy(this)">ID </th>
+          <th>Клієнт</th>
+          <th>Готель / Місто</th>
+          <th>Номер</th>
+          <th>Тип</th>
+          <th data-sort="Check_in_date" onclick="sortBy(this)">Заїзд </th>
+          <th data-sort="Check_out_date" onclick="sortBy(this)">Виїзд </th>
+          <th>Статус</th>
+          <th data-sort="Total_amount" onclick="sortBy(this)">Сума </th>
+          <th>Дії</th>
+        </tr>
+      </thead>
+      <tbody id="bookings-body">
+        <tr><td colspan="10"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Modal: Add/Edit Booking -->
+<div class="modal-overlay" id="modal-booking">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modal-title-text">Нове бронювання</span>
+      <button class="modal-close" onclick="closeModal('modal-booking')"></button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Клієнт</label>
+        <select class="form-select" id="f-user"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Номер кімнати</label>
+        <select class="form-select" id="f-room"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Дата заїзду</label>
+        <input class="form-input" id="f-checkin" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Дата виїзду</label>
+        <input class="form-input" id="f-checkout" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Статус</label>
+        <select class="form-select" id="f-status"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Загальна сума (₴)</label>
+        <input class="form-input" id="f-amount" type="number" min="0" step="0.01" placeholder="3000">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-booking')">Скасувати</button>
+      <button class="btn btn-primary" onclick="saveBooking()">Зберегти</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Delete -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="width:360px">
+    <div class="modal-title">
+      <span>Підтвердження</span>
+      <button class="modal-close" onclick="closeModal('modal-confirm')"></button>
+    </div>
+    <p style="color:var(--text-muted);margin-bottom:24px">Видалити це бронювання?</p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">Скасувати</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Видалити</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let editId = null;
+let deleteId = null;
+let users = [], rooms = [], bookingStatuses = [];
+const sorter = makeSorter('ID_Booking');
+const debouncedLoad = debounce(load);
+
+async function loadRefs() {
+  [users, rooms, bookingStatuses] = await Promise.all([
+    apiGet('/users'),
+    apiGet('/rooms'),
+    apiGet('/booking-statuses'),
+  ]);
+  // Populate status filter
+  const sel = document.getElementById('filter-status');
+  sel.innerHTML = '<option value="">Всі статуси</option>' +
+    bookingStatuses.map(s => `<option value="${s.ID_BookingStatus}">${esc(s.Title)}</option>`).join('');
+}
+
+async function load() {
+  const params = {
+    search: document.getElementById('search').value,
+    status: document.getElementById('filter-status').value || null,
+    ...sorter.get(),
+  };
+  const tbody = document.getElementById('bookings-body');
+  tbody.innerHTML = '<tr><td colspan="10"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>';
+  try {
+    const data = await apiGet('/bookings', params);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><p>Бронювань не знайдено</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(b => `
+      <tr>
+        <td class="td-muted">${b.ID_Booking}</td>
+        <td>${esc(b.user_name) || '<span class="td-muted">—</span>'}</td>
+        <td>
+          <div>${esc(b.hotel_name) || '—'}</div>
+          <div class="td-muted" style="font-size:12px">${esc(b.hotel_city) || ''}</div>
+        </td>
+        <td class="td-muted">${esc(b.Room_number) || '—'}</td>
+        <td class="td-muted">${esc(b.room_type) || '—'}</td>
+        <td>${fmtDate(b.Check_in_date)}</td>
+        <td>${fmtDate(b.Check_out_date)}</td>
+        <td>${statusBadge(b.status_title)}</td>
+        <td>${b.Total_amount ? fmtMoney(b.Total_amount) : '<span class="td-muted">—</span>'}</td>
+        <td>
+          <div class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openEditModal(${b.ID_Booking})"> Ред.</button>
+            <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${b.ID_Booking})">Вид.</button>
+          </div>
+        </td>
+      </tr>`).join('');
+    sorter.apply(document.querySelectorAll('thead th[data-sort]'));
+  } catch(e) {
+    toast('Помилка: ' + e.message, 'error');
+  }
+}
+
+function sortBy(th) { sorter.toggle(th.dataset.sort); load(); }
+
+function fillFormSelects() {
+  document.getElementById('f-user').innerHTML =
+    '<option value="">— Клієнт —</option>' +
+    users.map(u => `<option value="${u.ID_User}">${esc(u.Full_name)} (${esc(u.Login)})</option>`).join('');
+  document.getElementById('f-room').innerHTML =
+    '<option value="">— Номер —</option>' +
+    rooms.map(r => `<option value="${r.ID_Room}">#${esc(r.Room_number) || r.ID_Room} — ${esc(r.hotel_name) || '?'}</option>`).join('');
+  document.getElementById('f-status').innerHTML =
+    '<option value="">— Статус —</option>' +
+    bookingStatuses.map(s => `<option value="${s.ID_BookingStatus}">${esc(s.Title)}</option>`).join('');
+}
+
+function openAddModal() {
+  editId = null;
+  document.getElementById('modal-title-text').textContent = 'Нове бронювання';
+  fillFormSelects();
+  ['checkin','checkout','amount'].forEach(f => document.getElementById('f-'+f).value = '');
+  document.getElementById('f-user').value = '';
+  document.getElementById('f-room').value = '';
+  document.getElementById('f-status').value = '';
+  openModal('modal-booking');
+}
+
+async function openEditModal(id) {
+  editId = id;
+  document.getElementById('modal-title-text').textContent = 'Редагувати бронювання';
+  fillFormSelects();
+  try {
+    const b = await apiGet(`/bookings/${id}`);
+    document.getElementById('f-user').value    = b.ID_User || '';
+    document.getElementById('f-room').value    = b.ID_Room || '';
+    document.getElementById('f-checkin').value = b.Check_in_date ? b.Check_in_date.slice(0,10) : '';
+    document.getElementById('f-checkout').value= b.Check_out_date ? b.Check_out_date.slice(0,10) : '';
+    document.getElementById('f-status').value  = b.ID_BookingStatus || '';
+    document.getElementById('f-amount').value  = b.Total_amount || '';
+    openModal('modal-booking');
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+async function saveBooking() {
+  const payload = {
+    ID_User:          document.getElementById('f-user').value    ? Number(document.getElementById('f-user').value)    : null,
+    ID_Room:          document.getElementById('f-room').value    ? Number(document.getElementById('f-room').value)    : null,
+    Check_in_date:    document.getElementById('f-checkin').value  || null,
+    Check_out_date:   document.getElementById('f-checkout').value || null,
+    ID_BookingStatus: document.getElementById('f-status').value  ? Number(document.getElementById('f-status').value)  : null,
+    Total_amount:     document.getElementById('f-amount').value  ? Number(document.getElementById('f-amount').value)  : null,
+  };
+  try {
+    if (editId) {
+      await apiPut(`/bookings/${editId}`, payload);
+      toast('Бронювання оновлено');
+    } else {
+      await apiPost('/bookings', payload);
+      toast('Бронювання додано');
+    }
+    closeModal('modal-booking');
+    load();
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+function openDeleteModal(id) { deleteId = id; openModal('modal-confirm'); }
+
+async function confirmDelete() {
+  try {
+    await apiDelete(`/bookings/${deleteId}`);
+    toast('Бронювання видалено');
+    closeModal('modal-confirm');
+    load();
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+loadRefs().then(load);
+</script>
+</body>
+</html>

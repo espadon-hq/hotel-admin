@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotel Admin — Користувачі</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">Hotel<br><span>Admin Panel</span></div>
+  <div class="nav-section">Головне</div>
+  <a href="/static/index.html" class="nav-link"> Дашборд</a>
+  <div class="nav-section">Управління</div>
+  <a href="/static/hotels.html" class="nav-link"> Готелі</a>
+  <a href="/static/rooms.html" class="nav-link"> Номери</a>
+  <a href="/static/bookings.html" class="nav-link"> Бронювання</a>
+  <a href="/static/users.html" class="nav-link active"> Користувачі</a>
+</nav>
+
+<main class="main">
+  <div class="page-header">
+    <h1 class="page-title">Користувачі</h1>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Додати користувача</button>
+  </div>
+
+  <div class="toolbar">
+    <input class="search-input" id="search" placeholder="Пошук по імені, email, логіну…" oninput="debouncedLoad()">
+    <select class="filter-select" id="filter-role" onchange="load()">
+      <option value="">Всі ролі</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Ім'я</th>
+          <th>Логін</th>
+          <th>Email</th>
+          <th>Телефон</th>
+          <th>Роль</th>
+          <th>Мова</th>
+          <th>Бронювань</th>
+          <th>Реєстрація</th>
+          <th>Дії</th>
+        </tr>
+      </thead>
+      <tbody id="users-body">
+        <tr><td colspan="10"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Modal: Add/Edit User -->
+<div class="modal-overlay" id="modal-user">
+  <div class="modal">
+    <div class="modal-title">
+      <span id="modal-title-text">Новий користувач</span>
+      <button class="modal-close" onclick="closeModal('modal-user')"></button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label class="form-label">Повне ім'я *</label>
+        <input class="form-input" id="f-fullname" placeholder="Іван Петренко">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Логін *</label>
+        <input class="form-input" id="f-login" placeholder="ivan_p">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль <span id="pass-hint" style="color:var(--text-muted);font-size:10px">(обов'язковий)</span></label>
+        <input class="form-input" id="f-password" type="password" placeholder="••••••••">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="f-email" type="email" placeholder="ivan@example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Телефон</label>
+        <input class="form-input" id="f-phone" placeholder="+380501234567">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Роль</label>
+        <select class="form-select" id="f-role"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Мова інтерфейсу</label>
+        <select class="form-select" id="f-lang">
+          <option value="uk">🇺🇦 Українська</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="ru">🇷🇺 Русский</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-user')">Скасувати</button>
+      <button class="btn btn-primary" onclick="saveUser()">Зберегти</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Delete -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="width:360px">
+    <div class="modal-title">
+      <span>Підтвердження</span>
+      <button class="modal-close" onclick="closeModal('modal-confirm')"></button>
+    </div>
+    <p style="color:var(--text-muted);margin-bottom:24px">Видалити цього користувача?</p>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">Скасувати</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Видалити</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let editId = null;
+let deleteId = null;
+let userRoles = [];
+const debouncedLoad = debounce(load);
+
+async function loadRefs() {
+  userRoles = await apiGet('/user-roles');
+  const roleSel = document.getElementById('filter-role');
+  roleSel.innerHTML = '<option value="">Всі ролі</option>' +
+    userRoles.map(r => `<option value="${r.ID_Role}">${esc(r.Title)}</option>`).join('');
+}
+
+async function load() {
+  const params = {
+    search: document.getElementById('search').value,
+    role:   document.getElementById('filter-role').value || null,
+  };
+  const tbody = document.getElementById('users-body');
+  tbody.innerHTML = '<tr><td colspan="10"><div class="loading"><div class="spinner"></div> Завантаження…</div></td></tr>';
+  try {
+    const data = await apiGet('/users', params);
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><p>Користувачів не знайдено</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(u => `
+      <tr>
+        <td class="td-muted">${u.ID_User}</td>
+        <td><strong>${esc(u.Full_name)}</strong></td>
+        <td class="td-muted">${esc(u.Login)}</td>
+        <td class="td-muted">${esc(u.Email) || '—'}</td>
+        <td class="td-muted">${esc(u.Phone) || '—'}</td>
+        <td>${u.role_title ? `<span class="badge badge-info">${esc(u.role_title)}</span>` : '<span class="td-muted">—</span>'}</td>
+        <td class="td-muted">${u.Interface_language || '—'}</td>
+        <td>${u.bookings_count ?? 0}</td>
+        <td class="td-muted">${fmtDate(u.Created_at)}</td>
+        <td>
+          <div class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openEditModal(${u.ID_User})"> Ред.</button>
+            <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${u.ID_User})">Вид.</button>
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    toast('Помилка: ' + e.message, 'error');
+  }
+}
+
+function fillRoleSelect() {
+  document.getElementById('f-role').innerHTML =
+    '<option value="">— Роль —</option>' +
+    userRoles.map(r => `<option value="${r.ID_Role}">${esc(r.Title)}</option>`).join('');
+}
+
+function openAddModal() {
+  editId = null;
+  document.getElementById('modal-title-text').textContent = 'Новий користувач';
+  document.getElementById('pass-hint').textContent = '(обов\'язковий)';
+  fillRoleSelect();
+  ['fullname','login','password','email','phone'].forEach(f => document.getElementById('f-'+f).value = '');
+  document.getElementById('f-role').value = '';
+  document.getElementById('f-lang').value = 'uk';
+  openModal('modal-user');
+}
+
+async function openEditModal(id) {
+  editId = id;
+  document.getElementById('modal-title-text').textContent = 'Редагувати користувача';
+  document.getElementById('pass-hint').textContent = '(залиште порожнім, щоб не змінювати)';
+  fillRoleSelect();
+  try {
+    const u = await apiGet(`/users/${id}`);
+    document.getElementById('f-fullname').value = u.Full_name || '';
+    document.getElementById('f-login').value    = u.Login || '';
+    document.getElementById('f-password').value = '';
+    document.getElementById('f-email').value    = u.Email || '';
+    document.getElementById('f-phone').value    = u.Phone || '';
+    document.getElementById('f-role').value     = u.ID_Role || '';
+    document.getElementById('f-lang').value     = u.Interface_language || 'uk';
+    openModal('modal-user');
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+async function saveUser() {
+  const fullname = document.getElementById('f-fullname').value.trim();
+  const login    = document.getElementById('f-login').value.trim();
+  const password = document.getElementById('f-password').value;
+
+  if (!fullname) { toast('Вкажіть ім\'я', 'error'); return; }
+  if (!login)    { toast('Вкажіть логін', 'error'); return; }
+  if (!editId && !password) { toast('Вкажіть пароль', 'error'); return; }
+
+  const payload = {
+    Full_name:          fullname,
+    Login:              login,
+    Email:              document.getElementById('f-email').value.trim()  || null,
+    Phone:              document.getElementById('f-phone').value.trim()   || null,
+    ID_Role:            document.getElementById('f-role').value ? Number(document.getElementById('f-role').value) : null,
+    Interface_language: document.getElementById('f-lang').value || 'uk',
+    Password_hash:      password || (editId ? undefined : ''),
+  };
+  if (!password && editId) delete payload.Password_hash;
+
+  try {
+    if (editId) {
+      await apiPut(`/users/${editId}`, payload);
+      toast('Користувача оновлено');
+    } else {
+      await apiPost('/users', payload);
+      toast('Користувача додано');
+    }
+    closeModal('modal-user');
+    load();
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+function openDeleteModal(id) { deleteId = id; openModal('modal-confirm'); }
+
+async function confirmDelete() {
+  try {
+    await apiDelete(`/users/${deleteId}`);
+    toast('Користувача видалено');
+    closeModal('modal-confirm');
+    load();
+  } catch(e) { toast('Помилка: ' + e.message, 'error'); }
+}
+
+loadRefs().then(load);
+</script>
+</body>
+</html>
