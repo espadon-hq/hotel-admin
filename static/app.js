@@ -1,4 +1,4 @@
-// app.js — спільна логіка для всіх сторінок
+// app.js — спільна логіка
 
 const API = '/api';
 
@@ -14,7 +14,6 @@ async function apiFetch(path, opts = {}) {
   }
   return res.json();
 }
-
 const apiGet    = (p, params = {}) => {
   const qs = new URLSearchParams(Object.entries(params).filter(([,v]) => v != null && v !== '')).toString();
   return apiFetch(p + (qs ? '?' + qs : ''));
@@ -25,106 +24,113 @@ const apiDelete = (p)       => apiFetch(p, { method: 'DELETE' });
 
 // ─── Toast ─────────────────────────────────────────────────────────────────────
 function toast(msg, type = 'success') {
-  let container = document.querySelector('.toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.className = 'toast-container';
-    document.body.appendChild(container);
-  }
+  let c = document.querySelector('.toast-container');
+  if (!c) { c = document.createElement('div'); c.className = 'toast-container'; document.body.appendChild(c); }
   const el = document.createElement('div');
   el.className = `toast ${type}`;
-  el.innerHTML = `<span>${type === 'success' ? '' : ''}</span> ${msg}`;
-  container.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  el.innerHTML = `<span>${type === 'success' ? '✓' : '✕'}</span> ${msg}`;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
 }
 
 // ─── Modal ─────────────────────────────────────────────────────────────────────
-function openModal(id) {
-  document.getElementById(id)?.classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id)?.classList.remove('open');
-}
-
-// Close modal on overlay click
+function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
+function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
 document.addEventListener('click', e => {
-  if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('open');
-  }
+  if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
 });
 
-// ─── Sorting state ─────────────────────────────────────────────────────────────
-function makeSorter(defaultField = 'id') {
-  let field = defaultField, order = 'ASC';
-  return {
-    get: () => ({ sort: field, order }),
-    toggle: (f) => {
-      if (field === f) order = order === 'ASC' ? 'DESC' : 'ASC';
-      else { field = f; order = 'ASC'; }
-    },
-    apply: (headers) => {
-      headers.forEach(th => {
-        th.classList.remove('sorted');
-        th.dataset.order = '';
-        if (th.dataset.sort === field) {
-          th.classList.add('sorted');
-          th.dataset.order = order;
-        }
-      });
-    }
-  };
-}
-
 // ─── Debounce ──────────────────────────────────────────────────────────────────
-function debounce(fn, ms = 300) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+function debounce(fn, ms = 280) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
-// ─── Stars renderer ────────────────────────────────────────────────────────────
-function stars(n) {
-  if (!n) return '<span class="td-muted">—</span>';
-  return '<span class="stars">' + n + ' / 5' + '</span>';
-}
+// ─── Client-side table sorter ──────────────────────────────────────────────────
+// makeTableSorter(tbodyId, renderRowFn)
+// Usage:
+//   const tbl = makeTableSorter('tbody-id', row => `<tr>...</tr>`);
+//   tbl.setData(array);          // завантажити дані й відрендерити
+//   // на кожен <th>: data-sort="fieldName" onclick="tbl.sort(this)"
+function makeTableSorter(tbodyId, renderRow) {
+  let _data = [];
+  let _field = null;
+  let _asc   = true;
 
-// ─── Badge helpers ─────────────────────────────────────────────────────────────
-function statusBadge(title) {
-  const map = {
-    'Підтверджено': 'success', 'Confirmed': 'success',
-    'Очікує': 'warning',       'Pending': 'warning',
-    'Скасовано': 'danger',     'Cancelled': 'danger',
-    'Завершено': 'info',       'Completed': 'info',
-    'Заїхав': 'success',
+  // розумне порівняння: null — в кінець, числа — числово, дати — як дати
+  function cmp(a, b) {
+    if (a === null || a === undefined) return 1;
+    if (b === null || b === undefined) return -1;
+    // дата ISO
+    if (typeof a === 'string' && /^\d{4}-\d{2}-\d{2}/.test(a))
+      return new Date(a) - new Date(b);
+    // число або числовий рядок
+    const na = Number(a), nb = Number(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return String(a).localeCompare(String(b), 'uk');
+  }
+
+  function sorted() {
+    if (!_field) return _data;
+    return [..._data].sort((a, b) => {
+      const d = cmp(a[_field], b[_field]);
+      return _asc ? d : -d;
+    });
+  }
+
+  function updateHeaders() {
+    document.querySelectorAll('thead th[data-sort]').forEach(th => {
+      th.classList.remove('sorted');
+      const old = th.querySelector('.sort-arrow');
+      if (old) old.remove();
+      if (th.dataset.sort === _field) {
+        th.classList.add('sorted');
+        const arr = document.createElement('span');
+        arr.className = 'sort-arrow';
+        arr.textContent = _asc ? ' ↑' : ' ↓';
+        th.appendChild(arr);
+      }
+    });
+  }
+
+  function render() {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const rows = sorted();
+    tbody.innerHTML = rows.length
+      ? rows.map(renderRow).join('')
+      : `<tr><td colspan="99"><div class="empty-state"><p>Нічого не знайдено</p></div></td></tr>`;
+    updateHeaders();
+  }
+
+  return {
+    setData(data) { _data = data; render(); },
+    getData()     { return _data; },
+    sort(th) {
+      const f = th.dataset.sort;
+      if (_field === f) _asc = !_asc;
+      else { _field = f; _asc = true; }
+      render();
+    },
   };
-  const cls = map[title] || 'muted';
-  return `<span class="badge badge-${cls}">${title || '—'}</span>`;
 }
 
-function roomStatusBadge(title) {
-  const map = {
-    'Вільний': 'success', 'Free': 'success',
-    'Зайнятий': 'danger', 'Occupied': 'danger',
-    'На обслуговуванні': 'warning', 'Maintenance': 'warning',
-  };
-  const cls = map[title] || 'muted';
-  return `<span class="badge badge-${cls}">${title || '—'}</span>`;
+// ─── Formatters ────────────────────────────────────────────────────────────────
+function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('uk-UA') : '—'; }
+function fmtMoney(n) { return n != null ? Number(n).toLocaleString('uk-UA') + ' ₴' : '—'; }
+function esc(s)      { return s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function stars(n)    { return n ? `<span class="stars">${n} / 5</span>` : '<span class="td-muted">—</span>'; }
+
+// ─── Badges ─────────────────────────────────────────────────────────────────────
+function statusBadge(t) {
+  const m = { 'Підтверджено':'success','Confirmed':'success','Очікує':'warning','Pending':'warning','Скасовано':'danger','Cancelled':'danger','Завершено':'info','Completed':'info','Заїхав':'success' };
+  return `<span class="badge badge-${m[t]||'muted'}">${t||'—'}</span>`;
+}
+function roomStatusBadge(t) {
+  const m = { 'Вільний':'success','Free':'success','Зайнятий':'danger','Occupied':'danger','На обслуговуванні':'warning','Maintenance':'warning' };
+  return `<span class="badge badge-${m[t]||'muted'}">${t||'—'}</span>`;
 }
 
-// ─── Format helpers ────────────────────────────────────────────────────────────
-function fmtDate(d) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('uk-UA');
-}
-function fmtMoney(n) {
-  if (n == null) return '—';
-  return Number(n).toLocaleString('uk-UA', { minimumFractionDigits: 0 }) + ' ₴';
-}
-function esc(s) {
-  if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ─── Sidebar active link ───────────────────────────────────────────────────────
+// ─── Sidebar active ────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-link').forEach(a => {
   if (a.href === location.href) a.classList.add('active');
 });
