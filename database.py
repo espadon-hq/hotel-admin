@@ -1,5 +1,6 @@
 """
 database.py — підключення до Neon PostgreSQL
+Читає змінні які Vercel+Neon створює автоматично (PGHOST, PGUSER і т.д.)
 """
 import os
 
@@ -9,21 +10,26 @@ from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
 
-DB_HOST     = os.getenv("DB_HOST")
-DB_PORT     = os.getenv("DB_PORT", "5432")
-DB_NAME     = os.getenv("DB_NAME")
-DB_USER     = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
+# Vercel+Neon автоматично створює PGHOST, PGUSER, PGPASSWORD, PGDATABASE
+# Залишаємо DB_* як fallback для локальної розробки
+DB_HOST     = os.getenv("PGHOST")     or os.getenv("DB_HOST",     "localhost")
+DB_PORT     = os.getenv("PGPORT")     or os.getenv("DB_PORT",     "5432")
+DB_NAME     = os.getenv("PGDATABASE") or os.getenv("DB_NAME",     "booking_db")
+DB_USER     = os.getenv("PGUSER")     or os.getenv("DB_USER",     "postgres")
+DB_PASSWORD = os.getenv("PGPASSWORD") or os.getenv("DB_PASSWORD", "postgres")
 
 DATABASE_URL = (
     f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}"
     f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
+is_neon = DB_HOST and "neon.tech" in DB_HOST
+connect_args = {"ssl": "require"} if is_neon else {}
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"ssl": "require"},
+    connect_args=connect_args,
 )
 
 AsyncSessionLocal = sessionmaker(
